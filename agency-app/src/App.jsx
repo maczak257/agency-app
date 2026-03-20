@@ -570,6 +570,7 @@ function Statement({ jobs, artists }) {
   const [artistId, setArtistId] = useState("all");
   const [year, setYear] = useState("all");
   const [showPrint, setShowPrint] = useState(false);
+  const [exportMsg, setExportMsg] = useState("");
 
   const filtered = jobs.filter(j =>
     (artistId === "all" || j.artistId === parseInt(artistId)) &&
@@ -581,6 +582,88 @@ function Statement({ jobs, artists }) {
   const totalNet = totalCachet - totalCosts;
   const totalPaid = filtered.filter(j => j.invoiceStatus === "pagata").reduce((s,j) => s + (j.cachet - j.costs), 0);
   const years = [...new Set(jobs.map(j => j.date?.substring(0,4)).filter(Boolean))];
+
+  const buildRows = () => filtered.map(j => {
+    const art = artists.find(a => a.id === j.artistId);
+    return {
+      "Commessa": j.commessa,
+      "Data Evento": j.date || "",
+      "Artista": art?.name || "",
+      "Descrizione": j.description,
+      "Cliente": j.clientName,
+      "P.IVA Cliente": j.clientBilling?.piva || "",
+      "Cachet (€)": j.cachet,
+      "Costi (€)": j.costs,
+      "Netto (€)": j.cachet - j.costs,
+      "Stato Lavoro": JOB_STATUS[j.jobStatus]?.label || j.jobStatus,
+      "Stato Fattura": INV_STATUS[j.invoiceStatus]?.label || j.invoiceStatus,
+      "N° Fattura": j.invoiceNumber || "",
+      "Data Fattura": j.invoiceDate || "",
+      "Scadenza": j.dueDate || "",
+      "Data Pagamento": j.paidDate || "",
+      "Note": j.notes || ""
+    };
+  });
+
+  const exportCSV = () => {
+    const rows = buildRows();
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [
+      headers.map(escape).join(","),
+      ...rows.map(r => headers.map(h => escape(r[h])).join(",")),
+      "",
+      `"TOTALE","","","","","",${totalCachet},${totalCosts},${totalNet},"","","","","","",""`
+    ].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const label = artist ? artist.name.replace(/\s+/g, "_") : "tutti";
+    const periodo = year !== "all" ? `_${year}` : "";
+    a.href = url; a.download = `statement_${label}${periodo}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    setExportMsg("✓ CSV scaricato!"); setTimeout(() => setExportMsg(""), 3000);
+  };
+
+  const exportExcel = () => {
+    const rows = buildRows();
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const toXML = v => String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const cellType = v => typeof v === "number" ? `<Cell ss:StyleID="num"><Data ss:Type="Number">${v}</Data></Cell>` : `<Cell><Data ss:Type="String">${toXML(v)}</Data></Cell>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Styles>
+  <Style ss:ID="head"><Font ss:Bold="1"/><Interior ss:Color="#1E2535" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="num"><NumberFormat ss:Format="#,##0.00\ &quot;€&quot;"/></Style>
+  <Style ss:ID="tot"><Font ss:Bold="1"/><Interior ss:Color="#C9A84C22" ss:Pattern="Solid"/></Style>
+</Styles>
+<Worksheet ss:Name="Statement">
+<Table>
+<Row>${headers.map(h => `<Cell ss:StyleID="head"><Data ss:Type="String">${h}</Data></Cell>`).join("")}</Row>
+${rows.map(r => `<Row>${headers.map(h => cellType(r[h])).join("")}</Row>`).join("\n")}
+<Row>
+  <Cell ss:StyleID="tot" ss:MergeAcross="5"><Data ss:Type="String">TOTALE</Data></Cell>
+  <Cell ss:StyleID="num"><Data ss:Type="Number">${totalCachet}</Data></Cell>
+  <Cell ss:StyleID="num"><Data ss:Type="Number">${totalCosts}</Data></Cell>
+  <Cell ss:StyleID="num"><Data ss:Type="Number">${totalNet}</Data></Cell>
+  ${headers.slice(9).map(() => "<Cell><Data ss:Type=\"String\"></Data></Cell>").join("")}
+</Row>
+</Table>
+</Worksheet>
+</Workbook>`;
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const label = artist ? artist.name.replace(/\s+/g, "_") : "tutti";
+    const periodo = year !== "all" ? `_${year}` : "";
+    a.href = url; a.download = `statement_${label}${periodo}.xls`; a.click();
+    URL.revokeObjectURL(url);
+    setExportMsg("✓ Excel scaricato!"); setTimeout(() => setExportMsg(""), 3000);
+  };
 
   const printContent = () => {
     const w = window.open("", "_blank");
@@ -608,7 +691,12 @@ function Statement({ jobs, artists }) {
           <div style={{ fontFamily: "var(--font-head)", fontSize: 32, fontWeight: 700 }}>Statement</div>
           <div style={{ color: "var(--muted)", fontSize: 13, marginTop: 2 }}>Riepilogo commesse per artista</div>
         </div>
-        <button className="btn btn-accent" onClick={printContent}>⎙ Esporta / Stampa</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {exportMsg && <span style={{ fontSize: 12, color: "var(--ok)", fontWeight: 600 }}>{exportMsg}</span>}
+            <button className="btn btn-ghost" onClick={exportCSV}>⬇ CSV</button>
+            <button className="btn btn-ghost" onClick={exportExcel}>⬇ Excel</button>
+            <button className="btn btn-accent" onClick={printContent}>⎙ Stampa / PDF</button>
+          </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
