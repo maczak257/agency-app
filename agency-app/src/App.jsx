@@ -630,32 +630,38 @@ function Statement({ jobs, artists }) {
     const rows = buildRows();
     if (!rows.length) return;
     const headers = Object.keys(rows[0]);
-    const toXML = v => String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const cellType = v => typeof v === "number" ? `<Cell ss:StyleID="num"><Data ss:Type="Number">${v}</Data></Cell>` : `<Cell><Data ss:Type="String">${toXML(v)}</Data></Cell>`;
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-<Styles>
-  <Style ss:ID="head"><Font ss:Bold="1"/><Interior ss:Color="#1E2535" ss:Pattern="Solid"/></Style>
-  <Style ss:ID="num"><NumberFormat ss:Format="#,##0.00\ &quot;€&quot;"/></Style>
-  <Style ss:ID="tot"><Font ss:Bold="1"/><Interior ss:Color="#C9A84C22" ss:Pattern="Solid"/></Style>
-</Styles>
-<Worksheet ss:Name="Statement">
-<Table>
-<Row>${headers.map(h => `<Cell ss:StyleID="head"><Data ss:Type="String">${h}</Data></Cell>`).join("")}</Row>
-${rows.map(r => `<Row>${headers.map(h => cellType(r[h])).join("")}</Row>`).join("\n")}
-<Row>
-  <Cell ss:StyleID="tot" ss:MergeAcross="5"><Data ss:Type="String">TOTALE</Data></Cell>
-  <Cell ss:StyleID="num"><Data ss:Type="Number">${totalCachet}</Data></Cell>
-  <Cell ss:StyleID="num"><Data ss:Type="Number">${totalCosts}</Data></Cell>
-  <Cell ss:StyleID="num"><Data ss:Type="Number">${totalNet}</Data></Cell>
-  ${headers.slice(9).map(() => "<Cell><Data ss:Type=\"String\"></Data></Cell>").join("")}
-</Row>
-</Table>
-</Worksheet>
-</Workbook>`;
-    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const esc = v => String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const isNum = v => typeof v === "number";
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th { background-color: #1E2535; color: #C9A84C; font-weight: bold; padding: 6px 10px; border: 1px solid #ccc; text-align: left; }
+  td { padding: 5px 10px; border: 1px solid #ddd; }
+  tr:nth-child(even) td { background-color: #f9f9f9; }
+  .num { text-align: right; }
+  .tot { background-color: #FFF8E7; font-weight: bold; }
+</style>
+</head><body>
+<h2 style="font-family:Georgia;color:#1E2535;">Statement — ${artist ? esc(artist.name) : "Tutti gli artisti"}</h2>
+<p style="color:#888;font-size:11px;">Generato il ${new Date().toLocaleDateString("it-IT")}</p>
+${artist ? `<p><b>Ragione Sociale:</b> ${esc(artist.billing.ragioneSociale)} &nbsp;|&nbsp; <b>P.IVA:</b> ${esc(artist.billing.piva)}</p>` : ""}
+<table>
+<thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+<tbody>
+${rows.map(r => `<tr>${headers.map(h => `<td class="${isNum(r[h]) ? "num" : ""}">${esc(r[h])}</td>`).join("")}</tr>`).join("\n")}
+<tr class="tot">
+  <td colspan="6"><b>TOTALE</b></td>
+  <td class="num"><b>${totalCachet.toLocaleString("it-IT", {minimumFractionDigits:2})} €</b></td>
+  <td class="num"><b>${totalCosts.toLocaleString("it-IT", {minimumFractionDigits:2})} €</b></td>
+  <td class="num"><b>${totalNet.toLocaleString("it-IT", {minimumFractionDigits:2})} €</b></td>
+  ${headers.slice(9).map(() => "<td></td>").join("")}
+</tr>
+</tbody>
+</table>
+</body></html>`;
+    const blob = new Blob(["\uFEFF" + html], { type: "application/vnd.ms-excel;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const label = artist ? artist.name.replace(/\s+/g, "_") : "tutti";
