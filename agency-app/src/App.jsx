@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import supabase from "./supabase.js";
 
 // ─── SAMPLE DATA ────────────────────────────────────────────────────────────
 const INIT_ARTISTS = [
@@ -103,7 +104,7 @@ const CSS = `
 
 // ─── COMPONENTS ──────────────────────────────────────────────────────────────
 
-function Sidebar({ view, setView, overdueCount }) {
+function Sidebar({ view, setView, overdueCount, user }) {
   const items = [
     { id: "dashboard", icon: "◈", label: "Dashboard" },
     { id: "artisti",   icon: "♩", label: "Artisti" },
@@ -111,6 +112,14 @@ function Sidebar({ view, setView, overdueCount }) {
     { id: "statement", icon: "≡", label: "Statement" },
     { id: "pagamenti", icon: "€", label: "Pagamenti" },
   ];
+
+  const email = (user?.email || "").trim();
+  const initial = email ? email.charAt(0).toUpperCase() : "?";
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   return (
     <aside style={{ width: 220, background: "var(--sidebar)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", minHeight: "100vh", flexShrink: 0 }}>
       <div style={{ padding: "24px 20px 16px", borderBottom: "1px solid var(--border)" }}>
@@ -130,8 +139,68 @@ function Sidebar({ view, setView, overdueCount }) {
           </button>
         ))}
       </nav>
+      <div
+        style={{
+          margin: "0 12px 8px",
+          padding: "10px 12px",
+          background: "var(--dim)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              background: "var(--accent)",
+              color: "#0C0E14",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 14,
+              flexShrink: 0,
+            }}
+          >
+            {initial}
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
+              title={email || undefined}
+              style={{
+                color: "var(--muted)",
+                fontSize: 11,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {email || "—"}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          style={{
+            width: "100%",
+            padding: "4px 8px",
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--err)",
+            background: "transparent",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "var(--font-body)",
+          }}
+        >
+          Esci
+        </button>
+      </div>
       {overdueCount > 0 && (
-        <div onClick={() => setView("pagamenti")} style={{ margin: 12, padding: "10px 14px", background: "#EF444415", border: "1px solid #EF444430", borderRadius: 8, cursor: "pointer" }}>
+        <div onClick={() => setView("pagamenti")} style={{ margin: 12, marginTop: 0, padding: "10px 14px", background: "#EF444415", border: "1px solid #EF444430", borderRadius: 8, cursor: "pointer" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--err)", letterSpacing: ".06em" }}>⚠ ATTENZIONE</div>
           <div style={{ fontSize: 12, color: "#EF4444bb", marginTop: 3 }}>{overdueCount} fattur{overdueCount > 1 ? "e" : "a"} scadut{overdueCount > 1 ? "e" : "a"}</div>
         </div>
@@ -838,7 +907,7 @@ function Pagamenti({ jobs, artists, setJobs }) {
 }
 
 // ─── APP SHELL ───────────────────────────────────────────────────────────────
-export default function App() {
+export default function App({ user }) {
   const [view, setView] = useState("dashboard");
   const [artists, setArtists] = useState(INIT_ARTISTS);
   const [jobs, setJobs] = useState(INIT_JOBS);
@@ -847,7 +916,7 @@ export default function App() {
   return (
     <div style={{ display: "flex", background: "var(--bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
       <style>{CSS}</style>
-      <Sidebar view={view} setView={setView} overdueCount={overdueCount} />
+      <Sidebar view={view} setView={setView} overdueCount={overdueCount} user={user} />
       <div style={{ flex: 1, overflow: "hidden" }}>
         {view === "dashboard" && <Dashboard jobs={jobs} artists={artists} setView={setView} />}
         {view === "artisti"   && <Artisti jobs={jobs} artists={artists} setArtists={setArtists} />}
@@ -858,3 +927,595 @@ export default function App() {
     </div>
   );
 }
+
+import { useMemo, useState } from "react";
+import supabase from "./supabase.js";
+
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0C0E14; --sidebar: #10121A; --card: #161B26;
+    --border: #1E2535; --accent: #C9A84C; --accent2: #E2C97E;
+    --text: #E4E8F0; --muted: #5A6478; --dim: #2E3648;
+    --ok: #10B981; --warn: #F59E0B; --err: #EF4444; --info: #3B82F6;
+    --font-head: 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 14px; }
+  button { cursor: pointer; font-family: var(--font-body); }
+  input, select, textarea { font-family: var(--font-body); background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; width: 100%; transition: border-color .2s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; border: none; transition: all .15s; }
+  .btn-accent { background: var(--accent); color: #0C0E14; }
+  .btn-accent:hover { background: var(--accent2); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--dim); color: var(--text); }
+  .btn-danger { background: #EF444420; color: var(--err); border: 1px solid #EF444440; }
+  .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-family: var(--font-head); font-size: 22px; font-weight: 600; margin-bottom: 20px; color: var(--accent); }
+  .form-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; display: block; }
+  .auth-text-link { background: none; border: none; padding: 0; margin: 0; font-family: var(--font-body); font-size: 12px; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .auth-text-link:hover { color: var(--accent2); }
+`;
+
+export default function Auth() {
+  const [mode, setMode] = useState("login"); // "login" | "register" | "reset"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  const title = useMemo(() => {
+    if (mode === "reset") return "Recupera Password";
+    return mode === "login" ? "Accedi" : "Registrati";
+  }, [mode]);
+
+  const goToLogin = () => {
+    setMode("login");
+    setError("");
+    setInfo("");
+  };
+
+  const goToReset = () => {
+    setMode("reset");
+    setError("");
+    setInfo("");
+  };
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    setLoading(true);
+
+    try {
+      if (mode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+
+      // Se l'utente non e immediatamente loggato, Supabase tipicamente richiede conferma email.
+      if (!data?.session) {
+        setInfo("Registrazione completata. Controlla la tua email per confermare l'account.");
+      }
+    } catch (err) {
+      setError(err?.message || "Errore di autenticazione");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onResetSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setInfo(
+        "Controlla la tua email — ti abbiamo inviato un link per reimpostare la password."
+      );
+    } catch (err) {
+      setError(err?.message || "Errore durante il recupero password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background: "var(--bg)",
+      }}
+    >
+      <style>{CSS}</style>
+
+      <div className="modal" style={{ width: 520, padding: 28 }}>
+        <div className="modal-title" style={{ marginBottom: 12 }}>
+          {title}
+        </div>
+        {mode === "reset" ? (
+          <>
+            <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 18 }}>
+              Inserisci l&apos;email associata al tuo account: ti invieremo un link per
+              reimpostare la password.
+            </div>
+
+            <form onSubmit={onResetSubmit}>
+              <div style={{ marginBottom: 12 }}>
+                <label className="form-label">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="nome@dominio.com"
+                />
+              </div>
+
+              {error && (
+                <div
+                  className="btn btn-danger"
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    marginBottom: 12,
+                    padding: "10px 12px",
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+
+              {info && (
+                <div
+                  style={{
+                    width: "100%",
+                    border: "1px solid #C9A84C40",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    color: "var(--muted)",
+                    marginBottom: 12,
+                    background: "#C9A84C12",
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {info}
+                </div>
+              )}
+
+              <button
+                className="btn btn-accent"
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  justifyContent: "center",
+                  padding: "10px 16px",
+                  opacity: loading ? 0.75 : 1,
+                  marginBottom: 14,
+                }}
+              >
+                {loading ? "Attendere..." : "Invia link di recupero"}
+              </button>
+            </form>
+
+            <button type="button" className="auth-text-link" onClick={goToLogin}>
+              Torna al login
+            </button>
+          </>
+        ) : (
+          <>
+            <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 18 }}>
+              {mode === "login"
+                ? "Inserisci email e password per entrare."
+                : "Crea un account usando email e password."}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+              <button
+                type="button"
+                className={mode === "login" ? "btn btn-accent" : "btn btn-ghost"}
+                onClick={() => {
+                  setMode("login");
+                  setError("");
+                  setInfo("");
+                }}
+                style={{ flex: 1, justifyContent: "center", padding: "8px 10px" }}
+              >
+                Accedi
+              </button>
+              <button
+                type="button"
+                className={mode === "register" ? "btn btn-accent" : "btn btn-ghost"}
+                onClick={() => {
+                  setMode("register");
+                  setError("");
+                  setInfo("");
+                }}
+                style={{ flex: 1, justifyContent: "center", padding: "8px 10px" }}
+              >
+                Registrati
+              </button>
+            </div>
+
+            <form onSubmit={onSubmit}>
+              <div style={{ marginBottom: 12 }}>
+                <label className="form-label">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="nome@dominio.com"
+                />
+              </div>
+
+              <div style={{ marginBottom: mode === "login" ? 6 : 12 }}>
+                <label className="form-label">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  placeholder="********"
+                />
+              </div>
+
+              {mode === "login" && (
+                <div style={{ marginBottom: 12, textAlign: "left" }}>
+                  <button type="button" className="auth-text-link" onClick={goToReset}>
+                    Hai dimenticato la password?
+                  </button>
+                </div>
+              )}
+
+              {error && (
+                <div
+                  className="btn btn-danger"
+                  style={{
+                    width: "100%",
+                    justifyContent: "center",
+                    marginBottom: 12,
+                    padding: "10px 12px",
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+
+              {info && (
+                <div
+                  style={{
+                    width: "100%",
+                    border: "1px solid var(--border)",
+                    borderRadius: 10,
+                    padding: "10px 12px",
+                    color: "var(--muted)",
+                    marginBottom: 12,
+                    background: "rgba(59,130,246,0.08)",
+                  }}
+                >
+                  {info}
+                </div>
+              )}
+
+              <button
+                className="btn btn-accent"
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  justifyContent: "center",
+                  padding: "10px 16px",
+                  opacity: loading ? 0.75 : 1,
+                }}
+              >
+                {loading ? "Attendere..." : mode === "login" ? "Accedi" : "Crea account"}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+import React, { useEffect, useState } from "react";
+import ReactDOM from "react-dom/client";
+import supabase from "./supabase.js";
+import Auth from "./Auth.jsx";
+import App from "./App.jsx";
+import ResetPassword from "./ResetPassword.jsx";
+
+function hashIsPasswordRecovery() {
+  if (typeof window === "undefined") return false;
+  return window.location.hash.includes("type=recovery");
+}
+
+function Root() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isRecovery, setIsRecovery] = useState(hashIsPasswordRecovery);
+
+  useEffect(() => {
+    const onHashChange = () => setIsRecovery(hashIsPasswordRecovery());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!isMounted) return;
+        setUser(session?.user ?? null);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setUser(null);
+        setLoading(false);
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (!isMounted) return;
+        if (event === "PASSWORD_RECOVERY") {
+          setIsRecovery(true);
+        }
+        setUser(session?.user ?? null);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#0C0E14",
+          color: "#E4E8F0",
+          fontFamily: "DM Sans, system-ui, sans-serif",
+          padding: 24,
+        }}
+      >
+        Caricamento...
+      </div>
+    );
+  }
+
+  if (isRecovery) {
+    return <ResetPassword onComplete={() => setIsRecovery(false)} />;
+  }
+
+  return user ? <App user={user} /> : <Auth />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <Root />
+  </React.StrictMode>
+);
+
+import { useEffect, useRef, useState } from "react";
+import supabase from "./supabase.js";
+
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0C0E14; --sidebar: #10121A; --card: #161B26;
+    --border: #1E2535; --accent: #C9A84C; --accent2: #E2C97E;
+    --text: #E4E8F0; --muted: #5A6478; --dim: #2E3648;
+    --ok: #10B981; --warn: #F59E0B; --err: #EF4444; --info: #3B82F6;
+    --font-head: 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 14px; }
+  button { cursor: pointer; font-family: var(--font-body); }
+  input, select, textarea { font-family: var(--font-body); background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 12px; font-size: 13px; outline: none; width: 100%; transition: border-color .2s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; border: none; transition: all .15s; }
+  .btn-accent { background: var(--accent); color: #0C0E14; }
+  .btn-accent:hover { background: var(--accent2); }
+  .btn-danger { background: #EF444420; color: var(--err); border: 1px solid #EF444440; }
+  .modal { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 28px; width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .modal-title { font-family: var(--font-head); font-size: 22px; font-weight: 600; margin-bottom: 20px; color: var(--accent); }
+  .form-label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; display: block; }
+`;
+
+export default function ResetPassword({ onComplete }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const redirectTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+
+    if (password !== confirm) {
+      setError("Le password non coincidono.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+      setSuccess(true);
+      redirectTimerRef.current = setTimeout(async () => {
+        try {
+          window.history.replaceState(
+            null,
+            "",
+            window.location.pathname + window.location.search
+          );
+          await supabase.auth.signOut();
+        } finally {
+          onComplete?.();
+        }
+      }, 2000);
+    } catch (err) {
+      setError(err?.message || "Impossibile aggiornare la password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background: "var(--bg)",
+      }}
+    >
+      <style>{CSS}</style>
+
+      <div className="modal" style={{ width: 520, padding: 28 }}>
+        <div className="modal-title" style={{ marginBottom: 12 }}>
+          Nuova Password
+        </div>
+        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 18 }}>
+          Scegli una nuova password per il tuo account.
+        </div>
+
+        <form onSubmit={onSubmit}>
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">Nuova password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              autoComplete="new-password"
+              placeholder="********"
+              disabled={success}
+            />
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">Conferma password</label>
+            <input
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              required
+              minLength={6}
+              autoComplete="new-password"
+              placeholder="********"
+              disabled={success}
+            />
+          </div>
+
+          {error && (
+            <div
+              className="btn btn-danger"
+              style={{
+                width: "100%",
+                justifyContent: "center",
+                marginBottom: 12,
+                padding: "10px 12px",
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div
+              style={{
+                width: "100%",
+                border: "1px solid #C9A84C40",
+                borderRadius: 10,
+                padding: "10px 12px",
+                color: "var(--muted)",
+                marginBottom: 12,
+                background: "#C9A84C12",
+                fontSize: 13,
+              }}
+            >
+              Password aggiornata!
+            </div>
+          )}
+
+          <button
+            className="btn btn-accent"
+            type="submit"
+            disabled={loading || success}
+            style={{
+              width: "100%",
+              justifyContent: "center",
+              padding: "10px 16px",
+              opacity: loading || success ? 0.75 : 1,
+            }}
+          >
+            {loading ? "Attendere..." : "Salva nuova password"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Missing VITE_SUPABASE_URL and/or VITE_SUPABASE_ANON_KEY. Add them to your environment variables."
+  );
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export default supabase;
+
