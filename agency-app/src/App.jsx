@@ -1,39 +1,5 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import supabase from "./supabase.js";
-
-// ─── SAMPLE DATA ────────────────────────────────────────────────────────────
-const INIT_ARTISTS = [
-  { id: 1, name: "Marco Rossi", stageName: "Marco Rossi", email: "marco@example.com", phone: "+39 333 1234567",
-    billing: { ragioneSociale: "Marco Rossi", piva: "IT12345678901", cf: "RSSMRC80A01H501Z", address: "Via Roma 12, 20121 Milano", iban: "IT60X0542811101000000123456", banca: "Banca Intesa" } },
-  { id: 2, name: "Sara Bianchi", stageName: "Sara B.", email: "sara@example.com", phone: "+39 347 9876543",
-    billing: { ragioneSociale: "Sara Bianchi Musica Srl", piva: "IT98765432109", cf: "BNCSAR85M41F205X", address: "Corso Vittorio 45, 10121 Torino", iban: "IT40X0200805182000401270213", banca: "UniCredit" } },
-  { id: 3, name: "DJ Elektra", stageName: "Elektra", email: "elektra@management.it", phone: "+39 320 5551234",
-    billing: { ragioneSociale: "Elektra Entertainment Ltd", piva: "IT11223344556", cf: "LTKLTR90T41Z114Y", address: "Via Torino 8, 20123 Milano", iban: "IT15A0200801618000104152264", banca: "Banco BPM" } }
-];
-
-const INIT_JOBS = [
-  { id: 1, commessa: "AGY-2026-001", artistId: 1, description: "Concerto estate – Anfiteatro Romano", clientName: "Roma Estate Festival",
-    clientBilling: { ragioneSociale: "Roma Estate Srl", piva: "IT44556677889", address: "Via del Corso 100, Roma" },
-    date: "2026-07-15", cachet: 5000, costs: 500, jobStatus: "confermato", invoiceStatus: "emessa",
-    invoiceNumber: "FT-2026-045", invoiceDate: "2026-06-15", dueDate: "2026-07-15", paidDate: null,
-    notes: "Soundcheck ore 16:00, ingresso tecnici ore 14:00" },
-  { id: 2, commessa: "AGY-2026-002", artistId: 2, description: "Evento corporate – Lancio prodotto Tech", clientName: "TechCorp Italia",
-    clientBilling: { ragioneSociale: "TechCorp Italia SpA", piva: "IT55667788990", address: "Via Montenapoleone 5, Milano" },
-    date: "2026-04-20", cachet: 3500, costs: 350, jobStatus: "completato", invoiceStatus: "pagata",
-    invoiceNumber: "FT-2026-028", invoiceDate: "2026-04-25", dueDate: "2026-05-25", paidDate: "2026-05-20", notes: "" },
-  { id: 3, commessa: "AGY-2026-003", artistId: 3, description: "DJ Set – Festival Elettronico Torino", clientName: "ElectroBeat Productions",
-    clientBilling: { ragioneSociale: "ElectroBeat Productions Srl", piva: "IT66778899001", address: "Via Po 22, Torino" },
-    date: "2026-08-05", cachet: 12000, costs: 1200, jobStatus: "confermato", invoiceStatus: "da_emettere",
-    invoiceNumber: null, invoiceDate: null, dueDate: "2026-08-05", paidDate: null, notes: "Rider tecnico allegato. Volo da Milano incluso." },
-  { id: 4, commessa: "AGY-2026-004", artistId: 1, description: "Radio Session – RTL 102.5", clientName: "RTL 102.5",
-    clientBilling: { ragioneSociale: "RTL Radio Srl", piva: "IT12398745620", address: "Via Turati 29, Milano" },
-    date: "2026-03-01", cachet: 1500, costs: 0, jobStatus: "completato", invoiceStatus: "scaduta",
-    invoiceNumber: "FT-2026-012", invoiceDate: "2026-03-05", dueDate: "2026-04-05", paidDate: null, notes: "Fattura scaduta – sollecitare!" },
-  { id: 5, commessa: "AGY-2026-005", artistId: 2, description: "Showcase privato – Wedding VIP", clientName: "Luxury Events Milano",
-    clientBilling: { ragioneSociale: "Luxury Events Milano Srl", piva: "IT88990011223", address: "Via Brera 14, Milano" },
-    date: "2026-06-10", cachet: 4200, costs: 420, jobStatus: "in_trattativa", invoiceStatus: "da_emettere",
-    invoiceNumber: null, invoiceDate: null, dueDate: null, paidDate: null, notes: "In attesa di firma contratto" }
-];
 
 // ─── CONFIG ─────────────────────────────────────────────────────────────────
 const JOB_STATUS = {
@@ -51,11 +17,81 @@ const INV_STATUS = {
 
 const fmt = (n) => new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(n || 0);
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString("it-IT") : "–";
-const nextId = (arr) => Math.max(...arr.map(a => a.id), 0) + 1;
 const nextCommessa = (jobs) => {
   const nums = jobs.map(j => parseInt(j.commessa.split("-")[2] || 0));
   return `AGY-2026-${String(Math.max(...nums, 0) + 1).padStart(3, "0")}`;
 };
+const normalizeNullable = (value) => value === "" ? null : value;
+const dbToArtist = (row) => ({
+  id: row.id,
+  name: row.name || "",
+  stageName: row.stage_name || "",
+  email: row.email || "",
+  phone: row.phone || "",
+  billing: {
+    ragioneSociale: row.ragione_sociale || "",
+    piva: row.piva || "",
+    cf: row.cf || "",
+    address: row.address || "",
+    iban: row.iban || "",
+    banca: row.banca || "",
+  }
+});
+const artistToDb = (artist, userId) => ({
+  user_id: userId,
+  name: artist.name || "",
+  stage_name: normalizeNullable(artist.stageName || ""),
+  email: normalizeNullable(artist.email || ""),
+  phone: normalizeNullable(artist.phone || ""),
+  ragione_sociale: normalizeNullable(artist.billing?.ragioneSociale || ""),
+  piva: normalizeNullable(artist.billing?.piva || ""),
+  cf: normalizeNullable(artist.billing?.cf || ""),
+  address: normalizeNullable(artist.billing?.address || ""),
+  iban: normalizeNullable(artist.billing?.iban || ""),
+  banca: normalizeNullable(artist.billing?.banca || ""),
+});
+const dbToJob = (row) => ({
+  id: row.id,
+  commessa: row.commessa || "",
+  artistId: row.artist_id,
+  description: row.description || "",
+  clientName: row.client_name || "",
+  clientBilling: {
+    ragioneSociale: row.client_ragione_sociale || "",
+    piva: row.client_piva || "",
+    address: row.client_address || "",
+  },
+  date: row.date || "",
+  cachet: row.cachet || 0,
+  costs: row.costs || 0,
+  jobStatus: row.job_status || "in_trattativa",
+  invoiceStatus: row.invoice_status || "da_emettere",
+  invoiceNumber: row.invoice_number || "",
+  invoiceDate: row.invoice_date || "",
+  dueDate: row.due_date || "",
+  paidDate: row.paid_date || "",
+  notes: row.notes || "",
+});
+const jobToDb = (job, userId) => ({
+  user_id: userId,
+  artist_id: job.artistId,
+  commessa: normalizeNullable(job.commessa || ""),
+  description: job.description || "",
+  client_name: normalizeNullable(job.clientName || ""),
+  client_ragione_sociale: normalizeNullable(job.clientBilling?.ragioneSociale || ""),
+  client_piva: normalizeNullable(job.clientBilling?.piva || ""),
+  client_address: normalizeNullable(job.clientBilling?.address || ""),
+  date: normalizeNullable(job.date || ""),
+  cachet: Number(job.cachet) || 0,
+  costs: Number(job.costs) || 0,
+  job_status: normalizeNullable(job.jobStatus || "in_trattativa"),
+  invoice_status: normalizeNullable(job.invoiceStatus || "da_emettere"),
+  invoice_number: normalizeNullable(job.invoiceNumber || ""),
+  invoice_date: normalizeNullable(job.invoiceDate || ""),
+  due_date: normalizeNullable(job.dueDate || ""),
+  paid_date: normalizeNullable(job.paidDate || ""),
+  notes: normalizeNullable(job.notes || ""),
+});
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 const CSS = `
@@ -289,7 +325,7 @@ function Dashboard({ jobs, artists, setView }) {
   );
 }
 
-function Artisti({ artists, jobs, setArtists }) {
+function Artisti({ artists, jobs, onCreateArtist, onUpdateArtist, onDeleteArtist }) {
   const [selected, setSelected] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(null);
@@ -299,13 +335,15 @@ function Artisti({ artists, jobs, setArtists }) {
     setShowModal(true);
   };
   const openEdit = (a) => { setForm(JSON.parse(JSON.stringify(a))); setShowModal(true); };
-  const save = () => {
+  const save = async () => {
     if (!form.name) return;
-    if (form.id) setArtists(prev => prev.map(a => a.id === form.id ? form : a));
-    else setArtists(prev => [...prev, { ...form, id: nextId(prev) }]);
-    setShowModal(false);
+    const ok = form.id ? await onUpdateArtist(form) : await onCreateArtist(form);
+    if (ok) setShowModal(false);
   };
-  const del = (id) => { setArtists(prev => prev.filter(a => a.id !== id)); if (selected?.id === id) setSelected(null); };
+  const del = async (id) => {
+    const ok = await onDeleteArtist(id);
+    if (ok && selected?.id === id) setSelected(null);
+  };
 
   const sel = selected ? artists.find(a => a.id === selected.id) : null;
   const artJobs = sel ? jobs.filter(j => j.artistId === sel.id) : [];
@@ -439,30 +477,37 @@ function Artisti({ artists, jobs, setArtists }) {
   );
 }
 
-function Commesse({ jobs, artists, setJobs }) {
+function Commesse({ jobs, artists, onCreateJob, onUpdateJob, onDeleteJob, onMarkJobPaid }) {
   const [selected, setSelected] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [filterArtist, setFilterArtist] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
-  const emptyJob = { id: null, commessa: "", artistId: artists[0]?.id || 1, description: "", clientName: "",
+  const emptyJob = { id: null, commessa: "", artistId: artists[0]?.id || "", description: "", clientName: "",
     clientBilling: { ragioneSociale: "", piva: "", address: "" }, date: "", cachet: 0, costs: 0,
     jobStatus: "in_trattativa", invoiceStatus: "da_emettere", invoiceNumber: "", invoiceDate: "", dueDate: "", paidDate: "", notes: "" };
   const [form, setForm] = useState(emptyJob);
 
   const openAdd = () => { setForm({ ...emptyJob, commessa: nextCommessa(jobs) }); setShowModal(true); };
   const openEdit = (j) => { setForm(JSON.parse(JSON.stringify(j))); setShowModal(true); };
-  const save = () => {
-    const j = { ...form, cachet: parseFloat(form.cachet)||0, costs: parseFloat(form.costs)||0, artistId: parseInt(form.artistId) };
+  const save = async () => {
+    const j = { ...form, cachet: parseFloat(form.cachet)||0, costs: parseFloat(form.costs)||0 };
     if (!j.description) return;
-    if (j.id) setJobs(prev => prev.map(x => x.id === j.id ? j : x));
-    else setJobs(prev => [...prev, { ...j, id: nextId(prev) }]);
-    setShowModal(false);
-    setSelected(null);
+    const ok = j.id ? await onUpdateJob(j) : await onCreateJob(j);
+    if (ok) {
+      setShowModal(false);
+      setSelected(null);
+    }
   };
-  const del = (id) => { setJobs(prev => prev.filter(j => j.id !== id)); setSelected(null); };
-  const markPaid = (id) => setJobs(prev => prev.map(j => j.id === id ? { ...j, invoiceStatus: "pagata", paidDate: new Date().toISOString().split("T")[0] } : j));
+  const del = async (id) => {
+    const ok = await onDeleteJob(id);
+    if (ok) setSelected(null);
+  };
+  const markPaid = async (id) => {
+    const ok = await onMarkJobPaid(id);
+    if (ok) setSelected(null);
+  };
 
-  const filtered = jobs.filter(j => (filterArtist === "all" || j.artistId === parseInt(filterArtist)) && (filterStatus === "all" || j.invoiceStatus === filterStatus));
+  const filtered = jobs.filter(j => (filterArtist === "all" || String(j.artistId) === String(filterArtist)) && (filterStatus === "all" || j.invoiceStatus === filterStatus));
   const sel = selected ? jobs.find(j => j.id === selected) : null;
 
   return (
@@ -578,7 +623,7 @@ function Commesse({ jobs, artists, setJobs }) {
               <div className="form-grid">
                 <div><label className="form-label">N° Commessa</label><input value={form.commessa} onChange={e => setForm({...form,commessa:e.target.value})} /></div>
                 <div><label className="form-label">Artista</label>
-                  <select value={form.artistId} onChange={e => setForm({...form,artistId:parseInt(e.target.value)})}>
+                  <select value={form.artistId} onChange={e => setForm({...form,artistId:e.target.value})}>
                     {artists.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
@@ -642,10 +687,10 @@ function Statement({ jobs, artists }) {
   const [exportMsg, setExportMsg] = useState("");
 
   const filtered = jobs.filter(j =>
-    (artistId === "all" || j.artistId === parseInt(artistId)) &&
+    (artistId === "all" || String(j.artistId) === String(artistId)) &&
     (year === "all" || j.date?.startsWith(year))
   );
-  const artist = artistId !== "all" ? artists.find(a => a.id === parseInt(artistId)) : null;
+  const artist = artistId !== "all" ? artists.find(a => String(a.id) === String(artistId)) : null;
   const totalCachet = filtered.reduce((s,j) => s+j.cachet, 0);
   const totalCosts = filtered.reduce((s,j) => s+j.costs, 0);
   const totalNet = totalCachet - totalCosts;
@@ -842,13 +887,13 @@ ${rows.map(r => `<tr>${headers.map(h => `<td class="${isNum(r[h]) ? "num" : ""}"
   );
 }
 
-function Pagamenti({ jobs, artists, setJobs }) {
+function Pagamenti({ jobs, artists, onMarkJobPaid }) {
   const overdue = jobs.filter(j => j.invoiceStatus === "scaduta");
   const pending = jobs.filter(j => j.invoiceStatus === "emessa");
   const toIssue = jobs.filter(j => j.invoiceStatus === "da_emettere" && j.jobStatus !== "annullato");
   const paid = jobs.filter(j => j.invoiceStatus === "pagata");
 
-  const markPaid = (id) => setJobs(prev => prev.map(j => j.id === id ? { ...j, invoiceStatus: "pagata", paidDate: new Date().toISOString().split("T")[0] } : j));
+  const markPaid = async (id) => { await onMarkJobPaid(id); };
 
   const PayRow = ({ j, showPay }) => {
     const art = artists.find(a => a.id === j.artistId);
@@ -909,20 +954,130 @@ function Pagamenti({ jobs, artists, setJobs }) {
 // ─── APP SHELL ───────────────────────────────────────────────────────────────
 export default function App({ user }) {
   const [view, setView] = useState("dashboard");
-  const [artists, setArtists] = useState(INIT_ARTISTS);
-  const [jobs, setJobs] = useState(INIT_JOBS);
+  const [artists, setArtists] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
   const overdueCount = jobs.filter(j => j.invoiceStatus === "scaduta").length;
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (!user?.id) {
+        setArtists([]);
+        setJobs([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      const [artistsRes, jobsRes] = await Promise.all([
+        supabase.from("artists").select("*").eq("user_id", user.id),
+        supabase.from("jobs").select("*").eq("user_id", user.id),
+      ]);
+      if (artistsRes.error || jobsRes.error) {
+        alert("Errore durante il caricamento dati da Supabase.");
+        setLoading(false);
+        return;
+      }
+      setArtists((artistsRes.data || []).map(dbToArtist));
+      setJobs((jobsRes.data || []).map(dbToJob));
+      setLoading(false);
+    };
+    loadData();
+  }, [user?.id]);
+
+  const createArtist = async (artist) => {
+    const { data, error } = await supabase.from("artists").insert(artistToDb(artist, user.id)).select("*").single();
+    if (error) {
+      alert("Errore durante il salvataggio artista.");
+      return false;
+    }
+    setArtists(prev => [...prev, dbToArtist(data)]);
+    return true;
+  };
+  const updateArtist = async (artist) => {
+    const { data, error } = await supabase
+      .from("artists")
+      .update(artistToDb(artist, user.id))
+      .eq("id", artist.id)
+      .eq("user_id", user.id)
+      .select("*")
+      .single();
+    if (error) {
+      alert("Errore durante la modifica artista.");
+      return false;
+    }
+    const mapped = dbToArtist(data);
+    setArtists(prev => prev.map(a => a.id === artist.id ? mapped : a));
+    return true;
+  };
+  const deleteArtist = async (artistId) => {
+    const { error } = await supabase.from("artists").delete().eq("id", artistId).eq("user_id", user.id);
+    if (error) {
+      alert("Errore durante l'eliminazione artista.");
+      return false;
+    }
+    setArtists(prev => prev.filter(a => a.id !== artistId));
+    return true;
+  };
+  const createJob = async (job) => {
+    const { data, error } = await supabase.from("jobs").insert(jobToDb(job, user.id)).select("*").single();
+    if (error) {
+      alert("Errore durante il salvataggio commessa.");
+      return false;
+    }
+    setJobs(prev => [...prev, dbToJob(data)]);
+    return true;
+  };
+  const updateJob = async (job) => {
+    const { data, error } = await supabase
+      .from("jobs")
+      .update(jobToDb(job, user.id))
+      .eq("id", job.id)
+      .eq("user_id", user.id)
+      .select("*")
+      .single();
+    if (error) {
+      alert("Errore durante la modifica commessa.");
+      return false;
+    }
+    const mapped = dbToJob(data);
+    setJobs(prev => prev.map(j => j.id === job.id ? mapped : j));
+    return true;
+  };
+  const deleteJob = async (jobId) => {
+    const { error } = await supabase.from("jobs").delete().eq("id", jobId).eq("user_id", user.id);
+    if (error) {
+      alert("Errore durante l'eliminazione commessa.");
+      return false;
+    }
+    setJobs(prev => prev.filter(j => j.id !== jobId));
+    return true;
+  };
+  const markJobPaid = async (jobId) => {
+    const target = jobs.find(j => j.id === jobId);
+    if (!target) return false;
+    const today = new Date().toISOString().split("T")[0];
+    return updateJob({ ...target, invoiceStatus: "pagata", paidDate: today });
+  };
 
   return (
     <div style={{ display: "flex", background: "var(--bg)", minHeight: "100vh", fontFamily: "var(--font-body)" }}>
       <style>{CSS}</style>
       <Sidebar view={view} setView={setView} overdueCount={overdueCount} user={user} />
       <div style={{ flex: 1, overflow: "hidden" }}>
+        {loading && (
+          <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 14 }}>
+            Caricamento dati...
+          </div>
+        )}
+        {!loading && (
+          <>
         {view === "dashboard" && <Dashboard jobs={jobs} artists={artists} setView={setView} />}
-        {view === "artisti"   && <Artisti jobs={jobs} artists={artists} setArtists={setArtists} />}
-        {view === "commesse"  && <Commesse jobs={jobs} artists={artists} setJobs={setJobs} />}
+        {view === "artisti"   && <Artisti jobs={jobs} artists={artists} onCreateArtist={createArtist} onUpdateArtist={updateArtist} onDeleteArtist={deleteArtist} />}
+        {view === "commesse"  && <Commesse jobs={jobs} artists={artists} onCreateJob={createJob} onUpdateJob={updateJob} onDeleteJob={deleteJob} onMarkJobPaid={markJobPaid} />}
         {view === "statement" && <Statement jobs={jobs} artists={artists} />}
-        {view === "pagamenti" && <Pagamenti jobs={jobs} artists={artists} setJobs={setJobs} />}
+        {view === "pagamenti" && <Pagamenti jobs={jobs} artists={artists} onMarkJobPaid={markJobPaid} />}
+          </>
+        )}
       </div>
     </div>
   );
